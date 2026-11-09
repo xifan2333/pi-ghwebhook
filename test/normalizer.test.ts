@@ -27,6 +27,18 @@ test("normalizer - workflow_run completed with success", () => {
   assert.equal(topic, EventTopic.WorkflowSuccess);
 });
 
+test("normalizer - workflow_run completed with skipped", () => {
+  const payload = {
+    action: "completed",
+    workflow_run: {
+      conclusion: "skipped",
+      name: "CI",
+    },
+  };
+  const topic = normalizeEvent(GitHubEvent.WorkflowRun, payload);
+  assert.equal(topic, EventTopic.WorkflowSkipped);
+});
+
 test("normalizer - workflow_run in_progress returns null", () => {
   const payload = {
     action: "in_progress",

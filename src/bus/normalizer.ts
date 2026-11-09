@@ -13,6 +13,8 @@ const WORKFLOW_CONCLUSION_MAP: ReadonlyMap<string, EventTopic> = new Map([
   [WorkflowConclusion.Failure, EventTopic.WorkflowFailure],
   [WorkflowConclusion.Cancelled, EventTopic.WorkflowCancelled],
   [WorkflowConclusion.TimedOut, EventTopic.WorkflowTimedOut],
+  [WorkflowConclusion.Skipped, EventTopic.WorkflowSkipped],
+  [WorkflowConclusion.ActionRequired, EventTopic.WorkflowActionRequired],
 ]);
 
 const CHECK_SUITE_CONCLUSION_MAP: ReadonlyMap<string, EventTopic> = new Map([

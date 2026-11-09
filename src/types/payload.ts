@@ -1,107 +1,75 @@
-export interface GitHubSender {
-  login: string;
-  type: string; // "User" | "Bot" | "Organization"
-  id?: number;
-}
+import type { components } from "@octokit/openapi-webhooks-types";
 
-export interface GitHubWorkflowRun {
-  id: number;
-  name: string;
-  head_branch: string;
-  head_sha: string;
-  conclusion: string | null;
-  status: string;
-  html_url: string;
-  run_attempt: number;
-  run_number: number;
-}
+export type WebhookSchemas = components["schemas"];
 
-export interface GitHubRepository {
-  name: string;
-  full_name: string;
-  html_url: string;
-  default_branch?: string;
-}
+// Workflow Run
+export type WorkflowRunCompletedPayload =
+  WebhookSchemas["webhook-workflow-run-completed"];
+export type WorkflowRunInProgressPayload =
+  WebhookSchemas["webhook-workflow-run-in-progress"];
+export type WorkflowRunRequestedPayload =
+  WebhookSchemas["webhook-workflow-run-requested"];
+export type WorkflowRunPayload =
+  | WorkflowRunCompletedPayload
+  | WorkflowRunInProgressPayload
+  | WorkflowRunRequestedPayload;
 
-export interface GitHubPullRequestHead {
-  ref: string;
-  sha: string;
-}
+// Pull Request Review
+export type PullRequestReviewSubmittedPayload =
+  WebhookSchemas["webhook-pull-request-review-submitted"];
+export type PullRequestReviewEditedPayload =
+  WebhookSchemas["webhook-pull-request-review-edited"];
+export type PullRequestReviewDismissedPayload =
+  WebhookSchemas["webhook-pull-request-review-dismissed"];
+export type PullRequestReviewPayload =
+  | PullRequestReviewSubmittedPayload
+  | PullRequestReviewEditedPayload
+  | PullRequestReviewDismissedPayload;
 
-export interface GitHubPullRequest {
-  number: number;
-  title: string;
-  head: GitHubPullRequestHead;
-  html_url: string;
-  state: string;
-}
+// Pull Request Review Comment
+export type PullRequestReviewCommentCreatedPayload =
+  WebhookSchemas["webhook-pull-request-review-comment-created"];
+export type PullRequestReviewCommentEditedPayload =
+  WebhookSchemas["webhook-pull-request-review-comment-edited"];
+export type PullRequestReviewCommentDeletedPayload =
+  WebhookSchemas["webhook-pull-request-review-comment-deleted"];
+export type PullRequestReviewCommentPayload =
+  | PullRequestReviewCommentCreatedPayload
+  | PullRequestReviewCommentEditedPayload
+  | PullRequestReviewCommentDeletedPayload;
 
-export interface GitHubReview {
-  id: number;
-  user: GitHubSender;
-  body: string | null;
-  state: string;
-  html_url: string;
-  submitted_at?: string;
-}
+// Check Suite
+export type CheckSuiteCompletedPayload =
+  WebhookSchemas["webhook-check-suite-completed"];
+export type CheckSuiteRequestedPayload =
+  WebhookSchemas["webhook-check-suite-requested"];
+export type CheckSuiteRerequestedPayload =
+  WebhookSchemas["webhook-check-suite-rerequested"];
+export type CheckSuitePayload =
+  | CheckSuiteCompletedPayload
+  | CheckSuiteRequestedPayload
+  | CheckSuiteRerequestedPayload;
 
-export interface GitHubComment {
-  id: number;
-  user: GitHubSender;
-  body: string;
-  html_url: string;
-  path?: string;
-  line?: number;
-}
+// Issue Comment
+export type IssueCommentCreatedPayload =
+  WebhookSchemas["webhook-issue-comment-created"];
+export type IssueCommentEditedPayload =
+  WebhookSchemas["webhook-issue-comment-edited"];
+export type IssueCommentDeletedPayload =
+  WebhookSchemas["webhook-issue-comment-deleted"];
+export type IssueCommentPayload =
+  | IssueCommentCreatedPayload
+  | IssueCommentEditedPayload
+  | IssueCommentDeletedPayload;
 
-export interface GitHubCheckSuite {
-  id: number;
-  head_branch: string;
-  head_sha: string;
-  conclusion: string | null;
-  status: string;
-}
+export type SupportedWebhookPayload =
+  | WorkflowRunPayload
+  | PullRequestReviewPayload
+  | PullRequestReviewCommentPayload
+  | CheckSuitePayload
+  | IssueCommentPayload;
 
-export interface WorkflowRunPayload {
-  action: string;
-  workflow_run?: GitHubWorkflowRun;
-  repository?: GitHubRepository;
-  sender?: GitHubSender;
-}
-
-export interface PullRequestReviewPayload {
-  action: string;
-  review?: GitHubReview;
-  pull_request?: GitHubPullRequest;
-  repository?: GitHubRepository;
-  sender?: GitHubSender;
-}
-
-export interface PullRequestReviewCommentPayload {
-  action: string;
-  comment?: GitHubComment;
-  pull_request?: GitHubPullRequest;
-  repository?: GitHubRepository;
-  sender?: GitHubSender;
-}
-
-export interface CheckSuitePayload {
-  action: string;
-  check_suite?: GitHubCheckSuite;
-  repository?: GitHubRepository;
-  sender?: GitHubSender;
-}
-
-export interface IssueCommentPayload {
-  action: string;
-  issue?: {
-    number: number;
-    title: string;
-    pull_request?: Record<string, unknown>;
-  };
-  comment?: GitHubComment;
-  repository?: GitHubRepository;
-  sender?: GitHubSender;
-}
-
+/**
+ * Fallback generic webhook payload structure for unknown or untyped events.
+ */
 export type WebhookPayload = Record<string, any>;
