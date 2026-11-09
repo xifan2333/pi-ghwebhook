@@ -5,7 +5,7 @@ description: Set up and configure declarative GitHub Webhook automation (.pi/ghw
 
 # Setup GitHub Webhook Automation
 
-Configure zero-polling, event-driven GitHub Webhook automation for the current repository. When events occur (such as CI failures or review submissions), `pi-ghwebhook` intercepts them via a local reverse tunnel and wakes up the agent via `pi.sendUserMessage()` to close the loop automatically.
+Configure zero-polling, event-driven GitHub Webhook automation for the current repository using the official GitHub Actions Workflow specification (`on` + `jobs`). When events occur (such as CI failures or review submissions), `pi-ghwebhook` intercepts them via a local reverse tunnel and wakes up the agent via `pi.sendUserMessage()` to close the loop automatically.
 
 ## Work Loop
 
@@ -42,7 +42,7 @@ Inspect the repository to tailor the subscription rules:
    ```bash
    ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true
    ```
-   Inspect workflow names (such as `CI`, `Build`, `Test`, `Release`). If an obvious main CI workflow exists, record its name for filtering.
+   Inspect workflow names (such as `CI`, `Build`, `Test`, `Release`). If an obvious main CI workflow exists, record its name for the `workflows` filter.
 2. Check for AI code review bot integrations:
    - Check if `.coderabbit.yaml` or `.coderabbit.yml` exists.
    - Check for Greptile, Copilot, or other review bot configurations.
@@ -51,58 +51,49 @@ _Completion criterion_: Identified primary CI workflow name (or determined to ma
 
 ### Step 3: Scaffold `.pi/ghwebhook.json`
 
-Write `.pi/ghwebhook.json` in the repository root. Tailor the subscription rules based on the findings from Step 2:
+Write `.pi/ghwebhook.json` in the repository root. Include the `$schema` property for IDE autocompletion and validation:
 
 ```json
 {
-  "version": 1,
-  "enabled": true,
-  "repo": "auto",
-  "subscriptions": [
-    {
-      "event": "workflow_run.completed",
-      "filters": {
-        "branch": "@current",
-        "conclusion": "failure"
-      },
-      "action": {
-        "deliverAs": "followUp",
-        "prompt": "CI run failed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\nCommit: {{ head_sha }}\n\nPlease run `gh run view {{ run_id }} --log-failed` to diagnose the error and prepare a fix."
-      }
+  "$schema": "https://raw.githubusercontent.com/xifan2333/pi-ghwebhook/main/schemas/ghwebhook.schema.json",
+  "name": "CI & Review Automation",
+  "on": {
+    "workflow_run": {
+      "types": ["completed"],
+      "branches": ["@current"]
     },
-    {
-      "event": "workflow_run.completed",
-      "filters": {
-        "branch": "@current",
-        "conclusion": "success"
-      },
-      "action": {
-        "deliverAs": "followUp",
-        "prompt": "Remote CI has passed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\n\nPlease check PR status and verify if it is ready to merge."
-      }
-    },
-    {
-      "event": "pull_request_review.submitted",
-      "filters": {
-        "branch": "@current",
-        "isBot": true
-      },
-      "action": {
-        "deliverAs": "steer",
-        "prompt": "Received review comments from {{ sender }}:\n\nState: {{ review_state }}\nDetails:\n{{ review_body }}\n\nPlease evaluate these comments critically: triage true issues to fix, and refute false positives."
-      }
+    "pull_request_review": {
+      "types": ["submitted"],
+      "branches": ["@current"]
     }
-  ]
+  },
+  "jobs": {
+    "ci-failure": {
+      "if": "github.event.workflow_run.conclusion == 'failure'",
+      "prompt": "CI run failed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\nCommit: {{ head_sha }}\n\nPlease run `gh run view {{ run_id }} --log-failed` to diagnose the error and prepare a fix.",
+      "deliverAs": "followUp"
+    },
+    "ci-success": {
+      "if": "github.event.workflow_run.conclusion == 'success'",
+      "prompt": "Remote CI has passed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\n\nPlease check PR checks status and verify if it is ready to merge.",
+      "deliverAs": "followUp"
+    },
+    "review-bot": {
+      "if": "github.event.review.user.type == 'Bot'",
+      "prompt": "Received review comments from {{ sender }}:\n\nState: {{ review_state }}\nDetails:\n{{ review_body }}\n\nPlease evaluate these comments critically: triage true issues to fix, and refute false positives.",
+      "deliverAs": "steer"
+    }
+  }
 }
 ```
 
-If specific workflows were identified in Step 2 (e.g. `CI`), add `"workflow": "CI"` under `filters` for the `workflow_run.completed` rules to avoid triggering on auxiliary workflows.
+If specific workflows were identified in Step 2 (e.g. `CI`), add `"workflows": ["CI"]` under `on.workflow_run`.
 
-_Completion criterion_: `.pi/ghwebhook.json` exists in repository root, is valid JSON, and contains tailored subscriptions.
+_Completion criterion_: `.pi/ghwebhook.json` exists in repository root, references `$schema`, is valid JSON, and contains tailored `on` and `jobs`.
 
 ### Step 4: Verify and activate
 
-1. If running inside an active interactive Pi session, instruct the user to reload the extension or reload runtime:
+1. If running inside an active interactive Pi session, instruct the user to reload:
    ```text
    /reload
    ```
@@ -114,17 +105,31 @@ _Completion criterion_: Explained activation method to the user and confirmed co
 
 ## Reference
 
-### Supported Filter Keys
+### Schema and Autocompletion
 
-- `branch`: Target branch name or `@current` (dynamically matches the active Git branch).
-- `conclusion`: Workflow conclusion (`success`, `failure`, `cancelled`, `timed_out`, `skipped`, etc.).
-- `workflow`: Workflow name (e.g. `CI`).
-- `state`: Review state (`approved`, `changes_requested`, `commented`) or PR state.
-- `senders`: List of allowed sender logins (e.g. `["coderabbitai[bot]"]`).
-- `isBot`: Boolean flag matching bot senders (`true`) or human senders (`false`).
-- `match`: Key-value map matching nested payload properties via dot notation (e.g. `{"review.state": "changes_requested"}`).
+Add `$schema` at the top of `.pi/ghwebhook.json`:
 
-### Template Interpolation Variables
+```json
+"$schema": "https://raw.githubusercontent.com/xifan2333/pi-ghwebhook/main/schemas/ghwebhook.schema.json"
+```
+
+### Supported Trigger Keys under `on.<event>`
+
+- `types`: Activity types filtering `payload.action` (e.g. `["completed"]`, `["submitted"]`, `["opened"]`).
+- `branches`: Branches filter supporting `@current` and globs (e.g. `["@current", "main", "feat/*"]`).
+- `workflows`: Workflow names filter (e.g. `["CI"]`).
+
+### Conditions under `jobs.<job_id>.if`
+
+Supports standard comparison expressions without arbitrary code execution:
+
+- `github.event.workflow_run.conclusion == 'failure'`
+- `github.event.workflow_run.conclusion == 'success'`
+- `github.event.review.user.type == 'Bot'`
+- `github.event.sender.login == 'coderabbitai[bot]'`
+- Glob matching: `github.event.sender.login == '*[bot]'`
+
+### Template Variables
 
 - `{{ branch }}`: Current head branch.
 - `{{ head_sha }}`: Commit SHA.

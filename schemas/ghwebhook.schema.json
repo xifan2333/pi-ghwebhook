@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/xifan2333/pi-ghwebhook/main/schemas/ghwebhook.schema.json",
+  "title": "Pi GitHub Webhook Workflow Configuration",
+  "description": "GitHub Actions Workflow-compatible event automation configuration for Pi coding agent",
+  "type": "object",
+  "required": ["on", "jobs"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the JSON schema for validation and autocompletion"
+    },
+    "name": {
+      "type": "string",
+      "description": "Optional display name for this event automation workflow"
+    },
+    "repo": {
+      "type": "string",
+      "default": "auto",
+      "description": "Target GitHub repository in 'owner/repo' format, or 'auto' to detect from git remote"
+    },
+    "secret": {
+      "type": "string",
+      "description": "Optional Webhook HMAC SHA-256 verification secret"
+    },
+    "on": {
+      "description": "GitHub event triggers, matching GitHub Actions 'on' specification",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Single GitHub event name, e.g. 'push' or 'workflow_run'"
+        },
+        {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of GitHub event names, e.g. ['push', 'pull_request']"
+        },
+        {
+          "type": "object",
+          "description": "Map of event names to their trigger filtering criteria",
+          "properties": {
+            "workflow_run": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["completed", "requested", "in_progress"]
+                  },
+                  "description": "Activity types that trigger the workflow"
+                },
+                "branches": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Branches to filter on (supports '@current' and globs like 'main', 'feat/*')"
+                },
+                "workflows": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Workflow names to filter on (e.g. ['CI'])"
+                }
+              },
+              "additionalProperties": false
+            },
+            "pull_request": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "opened",
+                      "edited",
+                      "closed",
+                      "reopened",
+                      "synchronize",
+                      "ready_for_review"
+                    ]
+                  }
+                },
+                "branches": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "pull_request_review": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["submitted", "edited", "dismissed"]
+                  }
+                },
+                "branches": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "pull_request_review_comment": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["created", "edited", "deleted"]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "check_suite": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["completed", "requested", "rerequested"]
+                  }
+                },
+                "branches": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "additionalProperties": false
+            },
+            "issues": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "opened",
+                      "edited",
+                      "deleted",
+                      "closed",
+                      "reopened",
+                      "assigned",
+                      "labeled"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "issue_comment": {
+              "type": "object",
+              "properties": {
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["created", "edited", "deleted"]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "push": {
+              "type": "object",
+              "properties": {
+                "branches": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "types": { "type": "array", "items": { "type": "string" } },
+              "branches": { "type": "array", "items": { "type": "string" } },
+              "workflows": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          }
+        }
+      ]
+    },
+    "jobs": {
+      "type": "object",
+      "description": "Map of jobs to execute when matching events arrive",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Optional job title"
+          },
+          "if": {
+            "type": "string",
+            "description": "Conditional expression, e.g. \"github.event.workflow_run.conclusion == 'failure'\""
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Prompt template sent to Pi Agent, supporting {{ branch }}, {{ run_url }}, etc."
+          },
+          "deliverAs": {
+            "type": "string",
+            "enum": ["followUp", "steer"],
+            "default": "followUp",
+            "description": "Pi message delivery mode: 'followUp' (wait for agent to finish) or 'steer' (interrupt turn)"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

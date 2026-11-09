@@ -2,7 +2,7 @@ import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { GhWebhookConfig } from "../types/schema.js";
+import type { GhWebhookWorkflow } from "../types/schema.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,14 +23,14 @@ async function fileExists(path: string): Promise<boolean> {
 
 export async function loadProjectConfig(
   cwd: string,
-): Promise<GhWebhookConfig | null> {
+): Promise<GhWebhookWorkflow | null> {
   for (const relPath of CONFIG_CANDIDATES) {
     const fullPath = join(cwd, relPath);
     if (await fileExists(fullPath)) {
       try {
         const content = await readFile(fullPath, "utf8");
-        const parsed = JSON.parse(content) as GhWebhookConfig;
-        if (parsed && typeof parsed === "object" && parsed.version === 1) {
+        const parsed = JSON.parse(content) as GhWebhookWorkflow;
+        if (parsed && typeof parsed === "object" && parsed.on && parsed.jobs) {
           return parsed;
         }
       } catch (err) {

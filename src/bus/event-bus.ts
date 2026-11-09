@@ -1,70 +1,62 @@
-import type { SubscriptionRule } from "../types/schema.js";
+import type { GhWebhookWorkflow, EventTriggerConfig } from "../types/schema.js";
 import type { WebhookPayload } from "../types/payload.js";
-import { evaluateGuards } from "./guards.js";
-import { normalizeEventKey, resolveIncomingEventKeys } from "./normalizer.js";
+import { isTriggerMatched, evaluateCondition } from "./matcher.js";
 import { extractVariables, renderTemplate } from "../template/renderer.js";
 
 export interface ActionPlan {
   prompt: string;
   deliverAs: "steer" | "followUp";
-  event: string;
+  jobId: string;
 }
 
 export class WebhookEventBus {
-  private readonly routes = new Map<string, SubscriptionRule[]>();
+  constructor(private readonly workflow: GhWebhookWorkflow) {}
 
-  constructor(rules: SubscriptionRule[]) {
-    for (const rule of rules) {
-      const rawKey = rule.event ?? rule.topic;
-      if (!rawKey) continue;
-      const normalizedKey = normalizeEventKey(rawKey);
-
-      const existing = this.routes.get(normalizedKey) ?? [];
-      existing.push(rule);
-      this.routes.set(normalizedKey, existing);
+  private getTriggerForEvent(
+    incomingEvent: string,
+  ): EventTriggerConfig | null | undefined {
+    const on = this.workflow.on;
+    if (typeof on === "string") {
+      return on === incomingEvent ? null : undefined;
     }
-  }
-
-  getEvents(): string[] {
-    return Array.from(this.routes.keys());
+    if (Array.isArray(on)) {
+      return on.includes(incomingEvent) ? null : undefined;
+    }
+    if (typeof on === "object" && on !== null) {
+      if (Object.prototype.hasOwnProperty.call(on, incomingEvent)) {
+        return on[incomingEvent] as EventTriggerConfig | null;
+      }
+    }
+    return undefined;
   }
 
   dispatch(
-    event: string,
+    incomingEvent: string,
     payload: WebhookPayload,
     currentBranch: string,
   ): ActionPlan[] {
-    const candidateKeys = resolveIncomingEventKeys(event, payload);
-    const seenRules = new Set<SubscriptionRule>();
-    const matchedRules: SubscriptionRule[] = [];
-
-    for (const key of candidateKeys) {
-      const rules = this.routes.get(key);
-      if (!rules) continue;
-      for (const rule of rules) {
-        if (!seenRules.has(rule)) {
-          seenRules.add(rule);
-          matchedRules.push(rule);
-        }
-      }
-    }
-
-    if (matchedRules.length === 0) {
+    const trigger = this.getTriggerForEvent(incomingEvent);
+    if (trigger === undefined) {
       return [];
     }
 
-    const ctx = { currentBranch, payload };
+    if (!isTriggerMatched(trigger, payload, currentBranch)) {
+      return [];
+    }
+
     const vars = extractVariables(payload, currentBranch);
     const plans: ActionPlan[] = [];
 
-    for (const rule of matchedRules) {
-      if (evaluateGuards(rule.filters, ctx)) {
-        plans.push({
-          prompt: renderTemplate(rule.action.prompt, vars),
-          deliverAs: rule.action.deliverAs ?? "followUp",
-          event: rule.event ?? rule.topic ?? event,
-        });
+    for (const [jobId, job] of Object.entries(this.workflow.jobs)) {
+      if (!evaluateCondition(job.if, payload, currentBranch)) {
+        continue;
       }
+
+      plans.push({
+        prompt: renderTemplate(job.prompt, vars),
+        deliverAs: job.deliverAs ?? "followUp",
+        jobId,
+      });
     }
 
     return plans;

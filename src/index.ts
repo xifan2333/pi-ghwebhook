@@ -30,7 +30,7 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     // 1. 工作区探测：若当前项目无 .pi/ghwebhook.json，则静默休眠，零资源占用
     const config = await loadProjectConfig(ctx.cwd);
-    if (!config || !config.enabled) {
+    if (!config) {
       return;
     }
 
@@ -51,8 +51,8 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    // 3. 构建表驱动事件总线
-    const bus = new WebhookEventBus(config.subscriptions);
+    // 3. 构建 GitHub Actions Workflow 事件总线
+    const bus = new WebhookEventBus(config);
 
     // 4. 启动随机端口本地回环服务器
     loopback = new LoopbackServer({
@@ -80,7 +80,7 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    // 5. 托管 gh webhook forward 长连接子进程（默认全量监听 --events=*）
+    // 5. 托管 gh webhook forward 长连接子进程（全量监听）
     forwarder = new GhForwarder({
       repo,
       url: loopback.getUrl(),
@@ -93,8 +93,9 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
     forwarder.start();
 
     if (ctx.hasUI) {
+      const displayName = config.name ? `[${config.name}]` : "[pi-ghwebhook]";
       ctx.ui.notify(
-        `[pi-ghwebhook] 已监听 ${repo} (${currentBranch}) GitHub 事件流 (端口: ${loopback.getPort()})`,
+        `${displayName} 已监听 ${repo} (${currentBranch}) 事件流 (端口: ${loopback.getPort()})`,
         "info",
       );
     }
