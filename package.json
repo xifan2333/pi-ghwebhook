@@ -4,11 +4,14 @@
   "description": "Universal GitHub Webhook event bus and wake-up engine for Pi coding agent",
   "keywords": [
     "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "pi-extension",
+    "extension",
     "github",
     "webhook",
     "event-bus",
-    "automation",
-    "pi"
+    "automation"
   ],
   "homepage": "https://github.com/xifan2333/pi-ghwebhook#readme",
   "bugs": {
@@ -34,6 +37,7 @@
   "scripts": {
     "build": "tsc",
     "check": "mise run check",
+    "prepublishOnly": "npm run check && npm test",
     "test": "mise run test"
   },
   "devDependencies": {
@@ -50,9 +54,13 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./dist/index.js"
     ]
   }
 }
