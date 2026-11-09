@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-10
+
+### Fixed
+
+- **Clean Message Ingestion (`pi.sendMessage`)**: Switched from `pi.sendUserMessage()` to `pi.sendMessage()` with a registered `ghwebhook` custom message renderer (`⚡ [GitHub Webhook]`). Incoming webhook prompts now cleanly appear in the chat stream without hijacking or polluting the user's input box.
+- **Multi-Window PID Mutual Exclusion**: Implemented Linux-standard PID file locking (`.pi/ghwebhook.pid`) with `process.kill(pid, 0)` liveness probing. Opening multiple Pi windows on the same project no longer causes `gh webhook forward` collisions — secondary windows automatically enter `standby` and can take over ownership via `/ghwk.start`.
+
 ## [0.4.0] - 2026-11-10
 
 ### Added

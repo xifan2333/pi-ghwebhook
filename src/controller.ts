@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
+import { join } from "node:path";
 import type {
   ExtensionContext,
   ExtensionAPI,
@@ -12,6 +13,11 @@ import {
 import { WebhookEventBus } from "./bus/event-bus.js";
 import { LoopbackServer } from "./transport/loopback.js";
 import { GhForwarder, cleanupStaleWebhook } from "./transport/forwarder.js";
+import {
+  acquirePidLock,
+  releasePidLock,
+  type PidLockData,
+} from "./transport/pid-lock.js";
 import {
   ControllerStatus,
   ForwarderState,
@@ -36,7 +42,8 @@ const FORWARDER_STATUS_TABLE: Record<ForwarderState, StatusDescriptor> = {
   [ForwarderState.Running]: {
     icon: "● ",
     tone: "success",
-    getLabel: ({ repo, branch }) => `ghwk: ${repo} (${branch})`,
+    getLabel: ({ repo, branch }) =>
+      `ghwk: ${repo} (${branch}) [PID: ${process.pid}]`,
   },
   [ForwarderState.Reconnecting]: {
     icon: "▲ ",
@@ -75,6 +82,8 @@ export class WebhookController {
   private cwd = "";
   private gitWatcher: FSWatcher | null = null;
   private branchDebounceTimer: NodeJS.Timeout | null = null;
+  private lockHolder: PidLockData | null = null;
+  private lockPath = "";
 
   constructor(private readonly pi: ExtensionAPI) {}
 
@@ -100,10 +109,10 @@ export class WebhookController {
     return this.currentBranch;
   }
 
-  async start(ctx: ExtensionContext): Promise<boolean> {
+  async start(ctx: ExtensionContext, force = false): Promise<boolean> {
     this.ctx = ctx;
     this.cwd = ctx.cwd;
-    if (this.state === ControllerStatus.Running) return true;
+    if (this.state === ControllerStatus.Running && !force) return true;
 
     const config = await loadProjectConfig(ctx.cwd);
     if (!config) return this.failUnconfigured(ctx);
@@ -117,6 +126,29 @@ export class WebhookController {
     this.config = config;
     this.repo = repo;
     this.currentBranch = await resolveGitBranch(ctx.cwd);
+    this.lockPath = join(this.cwd, ".pi", "ghwebhook.pid");
+
+    const lockResult = acquirePidLock(
+      this.lockPath,
+      {
+        pid: process.pid,
+        repo: this.repo,
+        branch: this.currentBranch,
+        port: config.port ?? 0,
+        startedAt: Date.now(),
+      },
+      force,
+    );
+
+    if (!lockResult.acquired) {
+      this.state = ControllerStatus.Standby;
+      this.lockHolder = lockResult.holder ?? null;
+      this.initGitWatcher().catch(() => {});
+      this.updateStatusBar(ctx);
+      return true;
+    }
+
+    this.lockHolder = null;
 
     const loopbackOk = await this.initLoopback(config);
     if (!loopbackOk) {
@@ -176,6 +208,7 @@ export class WebhookController {
         service: "pi-ghwebhook",
         repo: this.repo,
         branch: this.currentBranch,
+        pid: process.pid,
         port: this.loopback?.getPort(),
         forwarder: this.forwarder ? this.forwarder.getState() : "stopped",
       }),
@@ -183,9 +216,18 @@ export class WebhookController {
         await this.refreshBranch();
         const plans = bus.dispatch(event, payload, this.currentBranch);
         for (const plan of plans) {
-          this.pi.sendUserMessage(plan.prompt, {
-            deliverAs: plan.deliverAs,
-          });
+          this.pi.sendMessage(
+            {
+              customType: "ghwebhook",
+              content: plan.prompt,
+              display: true,
+              details: { event, jobId: plan.jobId },
+            },
+            {
+              triggerTurn: true,
+              deliverAs: plan.deliverAs,
+            },
+          );
         }
       },
     });
@@ -240,6 +282,10 @@ export class WebhookController {
     if (ctx) {
       this.ctx = ctx;
     }
+    if (this.lockPath) {
+      releasePidLock(this.lockPath);
+    }
+    this.lockHolder = null;
     this.teardownGitWatcher();
     if (this.forwarder) {
       this.forwarder.stop();
@@ -273,7 +319,7 @@ export class WebhookController {
     if (this.repo) {
       await cleanupStaleWebhook(this.repo).catch(() => {});
     }
-    return this.start(ctx);
+    return this.start(ctx, true);
   }
 
   formatStatus(): string {
@@ -283,6 +329,13 @@ export class WebhookController {
 
     if (this.state === ControllerStatus.Stopped) {
       return `GitHub Webhook: 已暂停 (○ 处于离线状态)\n目标仓库: ${this.repo || "未知"}\n当前分支: ${this.currentBranch}\n可执行 /ghwk.start 重新建立连接。`;
+    }
+
+    if (this.state === ControllerStatus.Standby) {
+      const owner = this.lockHolder
+        ? `\n• 活跃进程: PID ${this.lockHolder.pid} (分支: ${this.lockHolder.branch})\n• 监听端口: ${this.lockHolder.port || "动态"}`
+        : "";
+      return `GitHub Webhook: 处于待机状态 (○ standby)${owner}\n当前窗口已让渡长连接，执行 /ghwk.start 随时接管。`;
     }
 
     const forwarderState = this.forwarder?.getState() ?? ForwarderState.Stopped;
@@ -302,6 +355,7 @@ export class WebhookController {
       statusHeader,
       `• 仓库: ${this.repo}`,
       `• 分支: ${this.currentBranch}`,
+      `• 本地进程: PID ${process.pid}`,
       `• 端口: ${port}`,
       `• 转发状态: ${forwarderState}`,
       `• 触发器: ${triggers}`,
@@ -323,6 +377,16 @@ export class WebhookController {
         "ghwk",
         targetCtx.ui.theme.fg("warning", "○ ") +
           targetCtx.ui.theme.fg("muted", "ghwk: stopped"),
+      );
+      return;
+    }
+
+    if (this.state === ControllerStatus.Standby) {
+      const ownerPid = this.lockHolder ? ` (PID: ${this.lockHolder.pid})` : "";
+      targetCtx.ui.setStatus(
+        "ghwk",
+        targetCtx.ui.theme.fg("muted", "○ ") +
+          targetCtx.ui.theme.fg("muted", `ghwk: standby${ownerPid}`),
       );
       return;
     }

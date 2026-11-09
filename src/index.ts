@@ -1,8 +1,16 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { WebhookController } from "./controller.js";
 
 export default function ghWebhookExtension(pi: ExtensionAPI): void {
   const controller = new WebhookController(pi);
+
+  // Register message renderer for incoming Webhook trigger events
+  pi.registerMessageRenderer("ghwebhook", (message, options, theme) => {
+    const { outputPad } = options;
+    const header = theme.fg("accent", "⚡ [GitHub Webhook]");
+    return new Text(`${header}\n${message.content}`, outputPad, 0);
+  });
 
   process.once("exit", () => {
     controller.stop().catch(() => {});
@@ -40,9 +48,10 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("ghwk.start", {
-    description: "手动启动本地 Webhook 回环服务并建立 GitHub 长连接",
+    description:
+      "手动启动本地 Webhook 回环服务并建立 GitHub 长连接（或接管所有权）",
     handler: async (_args, ctx) => {
-      const ok = await controller.start(ctx);
+      const ok = await controller.start(ctx, true);
       if (ok) {
         ctx.ui.notify("GitHub Webhook: 已启动监听并建立长连接", "info");
       }

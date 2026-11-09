@@ -47,6 +47,7 @@ export enum ReviewState {
 export enum ControllerStatus {
   Unconfigured = "unconfigured",
   Running = "running",
+  Standby = "standby",
   Stopped = "stopped",
 }
 
