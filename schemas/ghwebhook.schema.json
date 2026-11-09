@@ -23,6 +23,10 @@
       "type": "string",
       "description": "Optional Webhook HMAC SHA-256 verification secret"
     },
+    "port": {
+      "type": "integer",
+      "description": "Optional fixed local HTTP port for the loopback receiver, defaults to 0 (dynamic allocation)"
+    },
     "on": {
       "description": "GitHub event triggers, matching GitHub Actions 'on' specification",
       "oneOf": [

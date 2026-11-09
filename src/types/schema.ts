@@ -54,6 +54,11 @@ export const WorkflowSchema = Type.Object(
     secret: Type.Optional(
       Type.String({ description: "Optional Webhook HMAC secret" }),
     ),
+    port: Type.Optional(
+      Type.Number({
+        description: "Optional fixed local port, defaults to 0 (dynamic)",
+      }),
+    ),
     on: Type.Union(
       [
         Type.String(),

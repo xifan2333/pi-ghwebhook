@@ -13,18 +13,24 @@ export type WebhookEventHandler = (
 ) => void | Promise<void>;
 
 export interface LoopbackOptions {
+  port?: number;
   secret?: string;
+  getStatus?: () => Record<string, unknown>;
   onEvent: WebhookEventHandler;
 }
 
 export class LoopbackServer {
   private server: Server | null = null;
   private port = 0;
+  private readonly targetPort: number;
   private readonly secret?: string;
+  private readonly getStatus?: () => Record<string, unknown>;
   private readonly onEvent: WebhookEventHandler;
 
   constructor(options: LoopbackOptions) {
+    this.targetPort = options.port ?? 0;
     this.secret = options.secret;
+    this.getStatus = options.getStatus;
     this.onEvent = options.onEvent;
   }
 
@@ -43,7 +49,7 @@ export class LoopbackServer {
 
     return new Promise((resolve, reject) => {
       this.server!.once("error", reject);
-      this.server!.listen(0, "127.0.0.1", () => {
+      this.server!.listen(this.targetPort, "127.0.0.1", () => {
         const addr = this.server!.address();
         if (typeof addr === "object" && addr !== null) {
           this.port = addr.port;
@@ -65,6 +71,15 @@ export class LoopbackServer {
   }
 
   private handleRequest(req: IncomingMessage, res: ServerResponse): void {
+    if (req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      const statusData = this.getStatus
+        ? this.getStatus()
+        : { status: "active", package: "pi-ghwebhook", port: this.port };
+      res.end(JSON.stringify(statusData, null, 2));
+      return;
+    }
+
     if (req.method !== "POST") {
       res.writeHead(405, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Method Not Allowed" }));

@@ -56,7 +56,22 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
 
     // 4. 启动随机端口本地回环服务器
     loopback = new LoopbackServer({
+      port: config.port,
       secret: config.secret,
+      getStatus: () => ({
+        status: "active",
+        service: "pi-ghwebhook",
+        name: config.name ?? "GitHub Webhook Automation",
+        repo,
+        branch: currentBranch,
+        port: loopback?.getPort(),
+        url: loopback?.getUrl(),
+        forwarder: forwarder?.isRunning() ? "running" : "stopped",
+        triggers:
+          typeof config.on === "object" && config.on !== null
+            ? Object.keys(config.on)
+            : config.on,
+      }),
       onEvent: async (event, payload) => {
         const plans = bus.dispatch(event, payload, currentBranch);
         for (const plan of plans) {

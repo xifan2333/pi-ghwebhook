@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-09
+
+### Added
+
+- **HTTP Status Dashboard (GET)**: Added an HTTP GET health dashboard on the loopback server (`http://127.0.0.1:<port>/`), allowing developers to inspect active repo, branch, tunnel state, and event triggers directly in a web browser.
+- **Configurable Port (`port`)**: Added optional `port` configuration to `.pi/ghwebhook.json` (defaults to 0 for automatic dynamic allocation).
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

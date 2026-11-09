@@ -40,6 +40,31 @@ test("loopback - receives and dispatches webhook event", async () => {
   await server.stop();
 });
 
+test("loopback - handles GET request with status dashboard", async () => {
+  const server = new LoopbackServer({
+    getStatus: () => ({
+      status: "active",
+      service: "pi-ghwebhook",
+      test: true,
+    }),
+    onEvent: () => {},
+  });
+
+  const port = await server.start();
+  const res = await fetch(`http://127.0.0.1:${port}/`);
+  assert.equal(res.status, 200);
+  const data = (await res.json()) as {
+    status: string;
+    service: string;
+    test: boolean;
+  };
+  assert.equal(data.status, "active");
+  assert.equal(data.service, "pi-ghwebhook");
+  assert.equal(data.test, true);
+
+  await server.stop();
+});
+
 test("loopback - verifies signature correctly", async () => {
   const secret = "test-secret-123";
   let received = false;
