@@ -1,6 +1,6 @@
 {
   "name": "pi-ghwebhook",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Universal GitHub Webhook event bus and wake-up engine for Pi coding agent",
   "keywords": [
     "pi-package",
@@ -29,6 +29,7 @@
   "files": [
     "dist",
     "src",
+    "skills",
     "README.md",
     "README_zh.md",
     "CHANGELOG.md",
@@ -61,6 +62,9 @@
   "pi": {
     "extensions": [
       "./dist/index.js"
+    ],
+    "skills": [
+      "./skills"
     ]
   }
 }

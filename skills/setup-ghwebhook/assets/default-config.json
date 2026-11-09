@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "enabled": true,
+  "repo": "auto",
+  "subscriptions": [
+    {
+      "event": "workflow_run.completed",
+      "filters": {
+        "branch": "@current",
+        "conclusion": "failure"
+      },
+      "action": {
+        "deliverAs": "followUp",
+        "prompt": "CI run failed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\nCommit: {{ head_sha }}\n\nPlease run `gh run view {{ run_id }} --log-failed` to diagnose the error and prepare a fix."
+      }
+    },
+    {
+      "event": "workflow_run.completed",
+      "filters": {
+        "branch": "@current",
+        "conclusion": "success"
+      },
+      "action": {
+        "deliverAs": "followUp",
+        "prompt": "Remote CI has passed on branch {{ branch }}.\n\nRun URL: {{ run_url }}\n\nPlease check PR checks status and verify if it is ready to merge."
+      }
+    },
+    {
+      "event": "pull_request_review.submitted",
+      "filters": {
+        "branch": "@current",
+        "isBot": true
+      },
+      "action": {
+        "deliverAs": "steer",
+        "prompt": "Received review comments from {{ sender }}:\n\nState: {{ review_state }}\nDetails:\n{{ review_body }}\n\nPlease evaluate these comments critically: triage true issues to fix, and refute false positives."
+      }
+    }
+  ]
+}
