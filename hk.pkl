@@ -1,0 +1,38 @@
+amends "package://github.com/jdx/hk/releases/download/v2.10.0/hk@2.10.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.10.0/hk@2.10.0#/Builtins.pkl"
+
+exclude = List("node_modules/**", "dist/**", "coverage/**")
+
+steps {
+  ["ox-lint"] = Builtins.ox_lint
+
+  ["tsc"] = Builtins.tsc
+
+  ["prettier"] = (Builtins.prettier) {
+    glob = List("**/*.ts", "**/*.json", "**/*.md", "**/*.yml", "**/*.yaml")
+    exclude = List("package-lock.json")
+  }
+
+  ["sort-package-json"] = Builtins.sort_package_json
+
+  ["typos"] = Builtins.typos
+
+  ["mise"] = Builtins.mise
+
+  ["trailing-whitespace"] = Builtins.trailing_whitespace
+  ["newlines"] = Builtins.newlines
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["detect-private-key"] = Builtins.detect_private_key
+  ["check-case-conflict"] = Builtins.check_case_conflict
+  ["check-symlinks"] = Builtins.check_symlinks
+
+  ["check-complexity"] {
+    glob = List("src/**/*.ts")
+    check = "lizard -l typescript -Ecognitive -C 15 -T cognitive_complexity=15 {{files}}"
+  }
+
+  ["check-dup"] {
+    glob = List("src/**/*.ts")
+    check = "jscpd --config .jscpd.json"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "threshold": 3.0,
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["console"],
+  "path": ["src"],
+  "ignore": ["**/node_modules/**", "**/dist/**", "**/*.json"],
+  "format": ["typescript"]
+}

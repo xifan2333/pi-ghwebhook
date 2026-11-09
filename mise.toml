@@ -1,0 +1,46 @@
+[tools]
+node = "22.23.3"
+hk = "2.10.0"
+oxlint = "1.84.0"
+"npm:typescript" = "latest"
+"npm:prettier" = "latest"
+"npm:sort-package-json" = "latest"
+"github:kucherenko/jscpd" = "latest"
+"github:crate-ci/typos" = "latest"
+"pipx:lizard" = "latest"
+
+[tasks.default]
+description = "列出所有可用任务"
+run = "mise tasks"
+
+[tasks.hooks-install]
+description = "安装绑定 mise 环境的 Git hooks"
+run = "hk install --mise"
+
+[tasks.check]
+description = "运行全量质量审计（类型、oxlint、格式、复杂度、重复度、拼写）"
+run = "hk run check"
+
+[tasks."check:plan"]
+description = "预览 hk 审计执行计划与并行步骤"
+run = "hk run check --plan"
+
+[tasks."check:changed"]
+description = "仅对暂存区与未提交代码执行增量审计"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  git diff --name-only -z
+  git diff --cached --name-only -z
+  git ls-files --others --exclude-standard -z
+} | hk run check --files0-from - "$@"
+"""
+
+[tasks.fix]
+description = "自动修复格式、oxlint 问题、package.json 排序与空白字符"
+run = "hk fix"
+
+[tasks.test]
+description = "编译并运行轻量原生测试套件"
+run = "tsc && node --test test/**/*.test.ts"

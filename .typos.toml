@@ -1,0 +1,23 @@
+[files]
+extend-exclude = [
+  "node_modules",
+  "dist",
+  "coverage",
+  "package-lock.json"
+]
+
+[default.extend-words]
+ghwebhook = "ghwebhook"
+workflow_run = "workflow_run"
+pull_request = "pull_request"
+check_suite = "check_suite"
+issue_comment = "issue_comment"
+pull_request_review = "pull_request_review"
+pull_request_review_comment = "pull_request_review_comment"
+coderabbitai = "coderabbitai"
+greptile = "greptile"
+loopback = "loopback"
+normalizer = "normalizer"
+mise = "mise"
+pkl = "pkl"
+jscpd = "jscpd"

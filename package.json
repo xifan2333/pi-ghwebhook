@@ -1,0 +1,56 @@
+{
+  "name": "pi-ghwebhook",
+  "version": "0.1.0",
+  "description": "Universal GitHub Webhook event bus and wake-up engine for Pi coding agent",
+  "keywords": [
+    "pi-package",
+    "github",
+    "webhook",
+    "event-bus",
+    "automation",
+    "pi"
+  ],
+  "homepage": "https://github.com/xifan2333/pi-ghwebhook#readme",
+  "bugs": {
+    "url": "https://github.com/xifan2333/pi-ghwebhook/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xifan2333/pi-ghwebhook.git"
+  },
+  "license": "MIT",
+  "author": "xifan",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "check": "mise run check",
+    "test": "mise run test"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "@types/node": "^22.13.0",
+    "typebox": "^1.3.27",
+    "typescript": "^5.8.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
