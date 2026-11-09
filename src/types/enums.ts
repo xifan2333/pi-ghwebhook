@@ -40,3 +40,27 @@ export enum ReviewState {
   Commented = "commented",
   Dismissed = "dismissed",
 }
+
+/**
+ * Overall Webhook Controller operational lifecycle.
+ */
+export enum ControllerStatus {
+  Unconfigured = "unconfigured",
+  Running = "running",
+  Stopped = "stopped",
+}
+
+/**
+ * Background GitHub CLI forwarder tunnel connection state.
+ */
+export enum ForwarderState {
+  Idle = "idle",
+  Running = "running",
+  Reconnecting = "reconnecting",
+  Stopped = "stopped",
+}
+
+/**
+ * Semantic TUI theme tone.
+ */
+export type ThemeTone = "success" | "warning" | "error" | "muted";

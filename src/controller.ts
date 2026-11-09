@@ -1,3 +1,4 @@
+import { watch, type FSWatcher } from "node:fs";
 import type {
   ExtensionContext,
   ExtensionAPI,
@@ -5,61 +6,166 @@ import type {
 import {
   loadProjectConfig,
   resolveGitBranch,
+  resolveGitDir,
   resolveGitRepo,
 } from "./config/loader.js";
 import { WebhookEventBus } from "./bus/event-bus.js";
 import { LoopbackServer } from "./transport/loopback.js";
-import { GhForwarder } from "./transport/forwarder.js";
+import { GhForwarder, cleanupStaleWebhook } from "./transport/forwarder.js";
+import {
+  ControllerStatus,
+  ForwarderState,
+  type ThemeTone,
+} from "./types/enums.js";
 import type { GhWebhookWorkflow } from "./types/schema.js";
 
-export type ControllerState = "unconfigured" | "running" | "stopped";
+export { ControllerStatus };
+export type ControllerState = ControllerStatus;
+
+interface StatusDescriptor {
+  icon: string;
+  tone: ThemeTone;
+  getLabel: (meta: {
+    repo: string;
+    branch: string;
+    retryCount: number;
+  }) => string;
+}
+
+const FORWARDER_STATUS_TABLE: Record<ForwarderState, StatusDescriptor> = {
+  [ForwarderState.Running]: {
+    icon: "● ",
+    tone: "success",
+    getLabel: ({ repo, branch }) => `ghwk: ${repo} (${branch})`,
+  },
+  [ForwarderState.Reconnecting]: {
+    icon: "▲ ",
+    tone: "warning",
+    getLabel: ({ repo, retryCount }) =>
+      `ghwk: 重连中${retryCount > 0 ? ` (#${retryCount})` : ""} (${repo})`,
+  },
+  [ForwarderState.Stopped]: {
+    icon: "× ",
+    tone: "error",
+    getLabel: ({ repo }) => `ghwk: 断开 (${repo})`,
+  },
+  [ForwarderState.Idle]: {
+    icon: "○ ",
+    tone: "muted",
+    getLabel: () => "ghwk: 准备中",
+  },
+};
+
+const STATUS_HEADER_TABLE: Record<ForwarderState, (retry: number) => string> = {
+  [ForwarderState.Running]: () => "GitHub Webhook: 正在监听 (● 已建立长连接)",
+  [ForwarderState.Reconnecting]: (r) =>
+    `GitHub Webhook: 正在监听 (▲ 网络波动，正在自动重连第 ${r} 次)`,
+  [ForwarderState.Stopped]: () => "GitHub Webhook: 异常 (× 长连接转发已中断)",
+  [ForwarderState.Idle]: () => "GitHub Webhook: 离线 (○ 准备中)",
+};
 
 export class WebhookController {
-  private state: ControllerState = "unconfigured";
+  private state: ControllerStatus = ControllerStatus.Unconfigured;
   private config: GhWebhookWorkflow | null = null;
   private loopback: LoopbackServer | null = null;
   private forwarder: GhForwarder | null = null;
   private currentBranch = "main";
   private repo = "";
+  private ctx: ExtensionContext | null = null;
+  private cwd = "";
+  private gitWatcher: FSWatcher | null = null;
+  private branchDebounceTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly pi: ExtensionAPI) {}
 
-  getState(): ControllerState {
+  getState(): ControllerStatus {
     return this.state;
   }
 
-  async start(ctx: ExtensionContext): Promise<boolean> {
-    if (this.state === "running") {
-      return true;
+  getCurrentBranch(): string {
+    return this.currentBranch;
+  }
+
+  async refreshBranch(): Promise<string> {
+    if (!this.cwd) return this.currentBranch;
+    try {
+      const branch = await resolveGitBranch(this.cwd);
+      if (branch && branch !== this.currentBranch) {
+        this.currentBranch = branch;
+        this.updateStatusBar(this.ctx);
+      }
+    } catch {
+      // keep existing branch on resolution error
     }
+    return this.currentBranch;
+  }
+
+  async start(ctx: ExtensionContext): Promise<boolean> {
+    this.ctx = ctx;
+    this.cwd = ctx.cwd;
+    if (this.state === ControllerStatus.Running) return true;
 
     const config = await loadProjectConfig(ctx.cwd);
-    if (!config) {
-      this.state = "unconfigured";
-      this.updateStatusBar(ctx);
-      return false;
+    if (!config) return this.failUnconfigured(ctx);
+
+    const repo = await this.resolveTargetRepo(config, ctx.cwd);
+    if (!repo) {
+      this.notifyMissingRepo(ctx);
+      return this.failUnconfigured(ctx);
     }
 
     this.config = config;
+    this.repo = repo;
     this.currentBranch = await resolveGitBranch(ctx.cwd);
-    const resolvedRepo =
-      config.repo && config.repo !== "auto"
-        ? config.repo
-        : await resolveGitRepo(ctx.cwd);
 
-    if (!resolvedRepo) {
-      this.state = "unconfigured";
-      this.updateStatusBar(ctx);
-      if (ctx.hasUI) {
-        ctx.ui.notify(
-          "[ghwk] 未能检测到当前项目的 GitHub 仓库 (owner/repo)，请在配置中显式指定 'repo' 字段。",
-          "warning",
-        );
-      }
+    const loopbackOk = await this.initLoopback(config);
+    if (!loopbackOk) {
+      this.notifyLoopbackError(ctx);
       return false;
     }
 
-    this.repo = resolvedRepo;
+    this.initForwarder(config);
+    this.initGitWatcher().catch(() => {});
+
+    this.state = ControllerStatus.Running;
+    this.updateStatusBar(ctx);
+    return true;
+  }
+
+  private async resolveTargetRepo(
+    config: GhWebhookWorkflow,
+    cwd: string,
+  ): Promise<string | null> {
+    if (config.repo && config.repo !== "auto") {
+      return config.repo;
+    }
+    return resolveGitRepo(cwd);
+  }
+
+  private failUnconfigured(ctx: ExtensionContext): false {
+    this.state = ControllerStatus.Unconfigured;
+    this.updateStatusBar(ctx);
+    return false;
+  }
+
+  private notifyMissingRepo(ctx: ExtensionContext): void {
+    if (ctx.hasUI) {
+      ctx.ui.notify(
+        "[ghwk] 未能检测到当前项目的 GitHub 仓库 (owner/repo)，请在配置中显式指定 'repo' 字段。",
+        "warning",
+      );
+    }
+  }
+
+  private notifyLoopbackError(ctx: ExtensionContext): void {
+    if (ctx.hasUI) {
+      ctx.ui.notify("[ghwk] 无法启动回环服务，事件流未能挂载", "error");
+    }
+    this.state = ControllerStatus.Stopped;
+    this.updateStatusBar(ctx);
+  }
+
+  private async initLoopback(config: GhWebhookWorkflow): Promise<boolean> {
     const bus = new WebhookEventBus(config);
 
     this.loopback = new LoopbackServer({
@@ -71,9 +177,10 @@ export class WebhookController {
         repo: this.repo,
         branch: this.currentBranch,
         port: this.loopback?.getPort(),
-        forwarder: this.forwarder?.isRunning() ? "running" : "stopped",
+        forwarder: this.forwarder ? this.forwarder.getState() : "stopped",
       }),
       onEvent: async (event, payload) => {
+        await this.refreshBranch();
         const plans = bus.dispatch(event, payload, this.currentBranch);
         for (const plan of plans) {
           this.pi.sendUserMessage(plan.prompt, {
@@ -85,32 +192,55 @@ export class WebhookController {
 
     try {
       await this.loopback.start();
+      return true;
     } catch (err) {
       console.error("[ghwk] 无法启动回环服务:", err);
-      if (ctx.hasUI) {
-        ctx.ui.notify("[ghwk] 无法启动回环服务，事件流未能挂载", "error");
-      }
-      this.state = "stopped";
-      this.updateStatusBar(ctx);
       return false;
     }
+  }
 
+  private initForwarder(config: GhWebhookWorkflow): void {
     this.forwarder = new GhForwarder({
       repo: this.repo,
-      url: this.loopback.getUrl(),
+      url: this.loopback!.getUrl(),
       secret: config.secret,
-      onError: (err) => {
-        console.error("[ghwk] gh forwarder error:", err);
+      onError: (err) => console.error("[ghwk] gh forwarder error:", err),
+      onStatusChange: (status, detail) => {
+        this.updateStatusBar(this.ctx);
+        if (status === ForwarderState.Reconnecting && detail) {
+          console.warn(`[ghwk] ${detail}`);
+        }
       },
     });
-
     this.forwarder.start();
-    this.state = "running";
-    this.updateStatusBar(ctx);
-    return true;
+  }
+
+  private async initGitWatcher(): Promise<void> {
+    const gitDir = await resolveGitDir(this.cwd);
+    if (!gitDir) return;
+
+    try {
+      this.gitWatcher = watch(gitDir, (_eventType, filename) => {
+        if (filename !== "HEAD") return;
+        if (this.branchDebounceTimer) {
+          clearTimeout(this.branchDebounceTimer);
+        }
+        this.branchDebounceTimer = setTimeout(() => {
+          this.branchDebounceTimer = null;
+          this.refreshBranch().catch(() => {});
+        }, 50);
+        this.branchDebounceTimer.unref();
+      });
+    } catch {
+      // Fallback gracefully if directory watching is unsupported
+    }
   }
 
   async stop(ctx?: ExtensionContext): Promise<void> {
+    if (ctx) {
+      this.ctx = ctx;
+    }
+    this.teardownGitWatcher();
     if (this.forwarder) {
       this.forwarder.stop();
       this.forwarder = null;
@@ -119,25 +249,45 @@ export class WebhookController {
       await this.loopback.stop();
       this.loopback = null;
     }
-    this.state = "stopped";
-    if (ctx) {
-      this.updateStatusBar(ctx);
+    this.state = ControllerStatus.Stopped;
+    this.updateStatusBar(this.ctx);
+  }
+
+  private teardownGitWatcher(): void {
+    if (this.gitWatcher) {
+      try {
+        this.gitWatcher.close();
+      } catch {
+        // ignore watcher closing errors
+      }
+      this.gitWatcher = null;
+    }
+    if (this.branchDebounceTimer) {
+      clearTimeout(this.branchDebounceTimer);
+      this.branchDebounceTimer = null;
     }
   }
 
   async restart(ctx: ExtensionContext): Promise<boolean> {
     await this.stop(ctx);
+    if (this.repo) {
+      await cleanupStaleWebhook(this.repo).catch(() => {});
+    }
     return this.start(ctx);
   }
 
   formatStatus(): string {
-    if (this.state === "unconfigured") {
+    if (this.state === ControllerStatus.Unconfigured) {
       return "GitHub Webhook: 未配置 (缺少 .pi/ghwebhook.json)\n可运行 /skill:setup-ghwebhook 自动生成。";
     }
 
-    if (this.state === "stopped") {
+    if (this.state === ControllerStatus.Stopped) {
       return `GitHub Webhook: 已暂停 (○ 处于离线状态)\n目标仓库: ${this.repo || "未知"}\n当前分支: ${this.currentBranch}\n可执行 /ghwk.start 重新建立连接。`;
     }
+
+    const forwarderState = this.forwarder?.getState() ?? ForwarderState.Stopped;
+    const headerFn = STATUS_HEADER_TABLE[forwarderState];
+    const statusHeader = headerFn(this.forwarder?.getRetryCount() ?? 0);
 
     const port = this.loopback ? this.loopback.getPort() : "未知";
     const triggers =
@@ -149,36 +299,46 @@ export class WebhookController {
       : "无";
 
     return [
-      "GitHub Webhook: 正在监听 (● 已建立长连接)",
+      statusHeader,
       `• 仓库: ${this.repo}`,
       `• 分支: ${this.currentBranch}`,
       `• 端口: ${port}`,
+      `• 转发状态: ${forwarderState}`,
       `• 触发器: ${triggers}`,
       `• 配置任务: ${jobs}`,
     ].join("\n");
   }
 
-  updateStatusBar(ctx: ExtensionContext): void {
-    if (!ctx.hasUI) return;
+  updateStatusBar(ctx?: ExtensionContext | null): void {
+    const targetCtx = ctx ?? this.ctx;
+    if (!targetCtx?.hasUI) return;
 
-    if (this.state === "unconfigured") {
-      ctx.ui.setStatus("ghwk", undefined);
+    if (this.state === ControllerStatus.Unconfigured) {
+      targetCtx.ui.setStatus("ghwk", undefined);
       return;
     }
 
-    if (this.state === "stopped") {
-      ctx.ui.setStatus(
+    if (this.state === ControllerStatus.Stopped) {
+      targetCtx.ui.setStatus(
         "ghwk",
-        ctx.ui.theme.fg("warning", "○ ") +
-          ctx.ui.theme.fg("muted", "ghwk: stopped"),
+        targetCtx.ui.theme.fg("warning", "○ ") +
+          targetCtx.ui.theme.fg("muted", "ghwk: stopped"),
       );
       return;
     }
 
-    ctx.ui.setStatus(
+    const forwarderState = this.forwarder?.getState() ?? ForwarderState.Stopped;
+    const item = FORWARDER_STATUS_TABLE[forwarderState];
+    const label = item.getLabel({
+      repo: this.repo,
+      branch: this.currentBranch,
+      retryCount: this.forwarder?.getRetryCount() ?? 0,
+    });
+
+    targetCtx.ui.setStatus(
       "ghwk",
-      ctx.ui.theme.fg("success", "● ") +
-        ctx.ui.theme.fg("muted", `ghwk: ${this.repo} (${this.currentBranch})`),
+      targetCtx.ui.theme.fg(item.tone, item.icon) +
+        targetCtx.ui.theme.fg("muted", label),
     );
   }
 }

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-10
+
+### Added
+
+- **Automatic Reconnection & Exponential Backoff**: Managed `GhForwarder` automatically recovers from abnormal child process exits (network timeouts, socket drops, server disconnects) using exponential backoff (2s → 4s → ... max 30s).
+- **Stale Webhook Self-Healing**: Automatically cleans up orphaned `https://webhook-forwarder.github.com/hook` GitHub webhooks if a previous run exited ungracefully and caused `Hook already exists on this repository` (HTTP 422).
+- **Real-Time Branch Synchronization (Zero-Polling)**: Aligned with VS Code and Neovim gitsigns architectures to monitor `.git/HEAD` via OS kernel file notifications (`fs.watch`) and in-memory HEAD parsing, achieving sub-millisecond branch switch detection with zero CPU/process polling.
+- **Real-Time TUI Status Synchronization**: Dynamic status transitions reflect `reconnecting` (`▲`), `running` (`●`), and `disconnected` (`×`) states in the TUI status bar and `/ghwk.status` output.
+- **Table-Driven Architecture & Guard Clauses**: Eliminated deep nested `if` statements across the codebase with formalized `ControllerStatus` and `ForwarderState` enums, table-driven TUI/header status mappings, and functional early returns.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

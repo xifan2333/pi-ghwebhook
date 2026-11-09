@@ -17,10 +17,24 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
     await controller.stop(ctx);
   });
 
-  // 2. 原生 TUI 控制命令注册 (ghwk.*)
+  // 2. 实时分支同步（终端命令或 Agent 执行后立即刷新）
+  pi.on("user_bash", async () => {
+    await controller.refreshBranch();
+  });
+
+  pi.on("agent_settled", async () => {
+    await controller.refreshBranch();
+  });
+
+  pi.on("session_tree", async () => {
+    await controller.refreshBranch();
+  });
+
+  // 3. 原生 TUI 控制命令注册 (ghwk.*)
   pi.registerCommand("ghwk.status", {
     description: "显示 GitHub Webhook 当前长连接状态与配置信息",
     handler: async (_args, ctx) => {
+      await controller.refreshBranch();
       ctx.ui.notify(controller.formatStatus(), "info");
     },
   });

@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parseGitHubRepo, loadProjectConfig } from "../dist/config/loader.js";
+import {
+  parseGitHubRepo,
+  loadProjectConfig,
+  resolveGitDir,
+  resolveGitBranch,
+} from "../dist/config/loader.js";
 
 test("loader - parses git remote URLs correctly", () => {
   assert.equal(
@@ -42,4 +47,16 @@ test("loader - loads .pi/ghwebhook.json correctly", async () => {
   assert.ok(loaded.jobs.alert != null);
 
   await rm(tempDir, { recursive: true, force: true });
+});
+
+test("loader - resolves git directory correctly", async () => {
+  const gitDir = await resolveGitDir(process.cwd());
+  assert.ok(gitDir != null);
+  assert.ok(gitDir.endsWith(".git"));
+});
+
+test("loader - resolves git branch correctly via HEAD reading", async () => {
+  const branch = await resolveGitBranch(process.cwd());
+  assert.ok(typeof branch === "string");
+  assert.ok(branch.length > 0);
 });

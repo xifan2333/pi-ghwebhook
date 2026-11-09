@@ -92,6 +92,23 @@ function getNestedValue(obj: Record<string, any>, path: string): unknown {
   return current;
 }
 
+function isBotSender(payload: WebhookPayload): boolean {
+  const senderType = payload.review?.user?.type ?? payload.sender?.type;
+  const login = payload.review?.user?.login ?? payload.sender?.login ?? "";
+  return senderType === "Bot" || login.endsWith("[bot]");
+}
+
+const CONTEXT_RESOLVERS: Record<
+  string,
+  (payload: WebhookPayload, currentBranch: string) => unknown
+> = {
+  branch: (payload, current) => resolvePayloadBranch(payload) ?? current,
+  conclusion: (payload) =>
+    payload.workflow_run?.conclusion ?? payload.check_suite?.conclusion,
+  sender: (payload) => payload.sender?.login ?? payload.review?.user?.login,
+  isBot: (payload) => isBotSender(payload),
+};
+
 function resolveContextValue(
   path: string,
   payload: WebhookPayload,
@@ -102,18 +119,8 @@ function resolveContextValue(
     .replace(/^event\./, "")
     .trim();
 
-  // Special shortcuts
-  if (cleanPath === "branch")
-    return resolvePayloadBranch(payload) ?? currentBranch;
-  if (cleanPath === "conclusion")
-    return payload.workflow_run?.conclusion ?? payload.check_suite?.conclusion;
-  if (cleanPath === "sender")
-    return payload.sender?.login ?? payload.review?.user?.login;
-  if (cleanPath === "isBot") {
-    const senderType = payload.review?.user?.type ?? payload.sender?.type;
-    const login = payload.review?.user?.login ?? payload.sender?.login ?? "";
-    return senderType === "Bot" || login.endsWith("[bot]");
-  }
+  const resolver = CONTEXT_RESOLVERS[cleanPath];
+  if (resolver) return resolver(payload, currentBranch);
 
   return getNestedValue(payload, cleanPath);
 }
