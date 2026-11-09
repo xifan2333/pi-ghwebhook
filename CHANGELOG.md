@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-09
+
+### Added
+
+- **Native TUI Status Bar**: Persistent status bar indicator showing active repo, branch, and connection state (`● ghwk: <repo> (<branch>)` / `○ ghwk: stopped`), inspired by `pi-exa`.
+- **Controller Commands (`ghwk.*`)**: Dedicated commands for runtime control:
+  - `/ghwk.status`: Display formatted status card with active triggers and jobs.
+  - `/ghwk.start`: Manually start the receiver and GitHub tunnel.
+  - `/ghwk.stop`: Manually pause the receiver and release local process/ports.
+  - `/ghwk.restart`: Hot-restart and reload configuration from disk.
+- **WebhookController Architecture**: Encapsulated state machine cleanly decoupling lifecycle, process management, and TUI presentation.
+
 ## [0.2.1] - 2026-11-09
 
 ### Added

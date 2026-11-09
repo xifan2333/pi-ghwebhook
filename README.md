@@ -48,6 +48,23 @@ To test locally in an active session:
 pi -e /path/to/pi-ghwebhook
 ```
 
+## Commands & Status Bar
+
+pi-ghwebhook integrates directly into the Pi TUI status bar and provides dedicated commands:
+
+### Status Bar
+
+- Connected: `● ghwk: <repo> (<branch>)`
+- Stopped: `○ ghwk: stopped`
+- Unconfigured: Cleared from status bar (zero visual noise)
+
+### Commands
+
+- `/ghwk.status`: Display active connection status, repository, branch, port, and jobs.
+- `/ghwk.start`: Manually start the local receiver and GitHub forwarder.
+- `/ghwk.stop`: Manually pause the webhook forwarder and release local port.
+- `/ghwk.restart`: Reload configuration and restart the forwarder.
+
 ## Configuration (`.pi/ghwebhook.json`)
 
 Place `.pi/ghwebhook.json` in the root of any repository. Point `$schema` to the hosted JSON Schema for auto-completion in VS Code, Cursor, and other editors:

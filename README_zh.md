@@ -48,6 +48,23 @@ pi install git:github.com/xifan2333/pi-ghwebhook
 pi -e /path/to/pi-ghwebhook
 ```
 
+## 命令与状态栏
+
+pi-ghwebhook 原生融入 Pi 的 TUI 底部状态栏与交互命令系统：
+
+### 状态栏指示
+
+- 正常监听中：`● ghwk: <repo> (<branch>)`
+- 已手动暂停：`○ ghwk: stopped`
+- 未配置项目：彻底清空状态栏（零视觉噪音）
+
+### 命令列表
+
+- `/ghwk.status`：展示当前长连接状态、监听仓库、分支、端口与配置详情。
+- `/ghwk.start`：手动启动本地回环服务并拉起 GitHub 长连接。
+- `/ghwk.stop`：手动暂停监听，释放本地端口与长连接进程。
+- `/ghwk.restart`：重新读取配置并重启长连接服务。
+
 ## 配置契约 (`.pi/ghwebhook.json`)
 
 在仓库根目录下创建 `.pi/ghwebhook.json`。配置 `$schema` 即可享受现代 IDE 的实时悬浮提示与自动补全：

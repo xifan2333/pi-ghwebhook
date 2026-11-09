@@ -93,17 +93,28 @@ _Completion criterion_: `.pi/ghwebhook.json` exists in repository root, referenc
 
 ### Step 4: Verify and activate
 
-1. If running inside an active interactive Pi session, instruct the user to reload:
+1. If running inside an active interactive Pi session, reload runtime:
    ```text
    /reload
    ```
-2. On session start, `pi-ghwebhook` automatically detects `.pi/ghwebhook.json`, binds an ephemeral local port on `127.0.0.1:0`, spawns `gh webhook forward --events=*`, and displays an info notification in TUI.
+2. Verify the status in the bottom status bar (`● ghwk: <repo> (<branch>)`) or run:
+   ```text
+   /ghwk.status
+   ```
+3. Use `/ghwk.stop` and `/ghwk.start` anytime to pause and resume the webhook forwarder.
 
-_Completion criterion_: Explained activation method to the user and confirmed configuration ready for incoming events.
+_Completion criterion_: Verified status via `/ghwk.status` or status bar, confirming configuration active and listening.
 
 ---
 
 ## Reference
+
+### Commands
+
+- `/ghwk.status`: Display current connection status, active repo, branch, port, and jobs.
+- `/ghwk.start`: Manually start the local receiver and GitHub tunnel.
+- `/ghwk.stop`: Manually pause the webhook forwarder and release port.
+- `/ghwk.restart`: Reload configuration and restart the forwarder.
 
 ### Schema and Autocompletion
 
