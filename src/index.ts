@@ -5,7 +5,6 @@ import {
   resolveGitRepo,
 } from "./config/loader.js";
 import { WebhookEventBus } from "./bus/event-bus.js";
-import { normalizeEvent } from "./bus/normalizer.js";
 import { LoopbackServer } from "./transport/loopback.js";
 import { GhForwarder } from "./transport/forwarder.js";
 
@@ -59,10 +58,7 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
     loopback = new LoopbackServer({
       secret: config.secret,
       onEvent: async (event, payload) => {
-        const topic = normalizeEvent(event, payload);
-        if (!topic) return;
-
-        const plans = bus.dispatch(topic, payload, currentBranch);
+        const plans = bus.dispatch(event, payload, currentBranch);
         for (const plan of plans) {
           pi.sendUserMessage(plan.prompt, {
             deliverAs: plan.deliverAs,
@@ -84,7 +80,7 @@ export default function ghWebhookExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    // 5. 托管 gh webhook forward 长连接子进程
+    // 5. 托管 gh webhook forward 长连接子进程（默认全量监听 --events=*）
     forwarder = new GhForwarder({
       repo,
       url: loopback.getUrl(),

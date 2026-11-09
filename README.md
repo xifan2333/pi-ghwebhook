@@ -8,9 +8,11 @@ Eliminates manual polling and terminal switching after creating PRs or waiting f
 
 ## 🌟 Key Features
 
-- **Zero Polling & Zero Public IP**: Uses `gh webhook forward` local reverse tunnels. No public server, ngrok, or exposed ports needed.
+- **100% Upstream Aligned**: Direct 1-to-1 match with GitHub's wire protocol (`<event>` or `<event>.<action>`). Supports **all 100+ GitHub Webhook events** (e.g. `workflow_run.completed`, `pull_request.opened`, `issues.opened`, `push`, `release.published`).
+- **Flexible Declarative Filters**: State & conclusion checks belong in `filters` (`conclusion`, `branch`, `isBot`, `senders`, `workflow`, `match`). No hardcoded pseudo-semantics in code.
+- **Zero Polling & Zero Public IP**: Uses `gh webhook forward --events=*` local reverse tunnels. No public server, ngrok, or exposed ports needed.
 - **Dynamic Port Allocation**: Binds to `127.0.0.1:0`. The OS kernel dynamically assigns free ports, ensuring zero port conflicts across concurrent terminal windows or multi-agent sessions.
-- **Table-Driven Architecture**: $O(1)$ Hash Map routing (`Map<EventTopic, SubscriptionRule[]>`), zero cascading `if-else` spaghetti, strict cognitive & cyclomatic complexity gates (CCN $\le 15$, CogC $\le 15$).
+- **Table-Driven Architecture**: $O(1)$ Hash Map routing (`Map<string, SubscriptionRule[]>`), zero cascading `if-else` spaghetti, strict cognitive & cyclomatic complexity gates (CCN $\le 15$, CogC $\le 15$).
 - **Workspace-Aware & Zero Footprint**: Probes `.pi/ghwebhook.json` on `session_start`. If absent or disabled, it sleeps silently with 0% CPU and zero open ports.
 - **Clean Lifecycle Teardown**: Hooks into `session_shutdown` and `process.on('exit')` to idempotently kill forwarder child processes and close HTTP servers. No orphan processes.
 
@@ -45,10 +47,11 @@ Place `.pi/ghwebhook.json` (or `.agents/ghwebhook.json`) in the root of any repo
   "repo": "auto",
   "subscriptions": [
     {
-      "topic": "github.workflow_run.failure",
+      "event": "workflow_run.completed",
       "filters": {
         "branch": "@current",
-        "workflow": "CI"
+        "workflow": "CI",
+        "conclusion": "failure"
       },
       "action": {
         "deliverAs": "followUp",
@@ -56,10 +59,10 @@ Place `.pi/ghwebhook.json` (or `.agents/ghwebhook.json`) in the root of any repo
       }
     },
     {
-      "topic": "github.workflow_run.success",
+      "event": "workflow_run.completed",
       "filters": {
         "branch": "@current",
-        "workflow": "CI"
+        "conclusion": "success"
       },
       "action": {
         "deliverAs": "followUp",
@@ -67,14 +70,30 @@ Place `.pi/ghwebhook.json` (or `.agents/ghwebhook.json`) in the root of any repo
       }
     },
     {
-      "topic": "github.pull_request_review.bot",
+      "event": "pull_request_review.submitted",
       "filters": {
         "branch": "@current",
+        "isBot": true,
         "senders": ["coderabbitai[bot]", "greptile[bot]"]
       },
       "action": {
         "deliverAs": "steer",
         "prompt": "🤖 Received review comments from Review Bot ({{ sender }}):\n\n- State: {{ review_state }}\n- Details:\n{{ review_body }}\n\nPlease evaluate these comments critically: triage true issues to fix, and refute false positives."
+      }
+    },
+    {
+      "event": "issues.opened",
+      "action": {
+        "prompt": "📌 New issue opened #{{ issue_number }}: {{ issue_title }}\n\n{{ issue_body }}"
+      }
+    },
+    {
+      "event": "push",
+      "filters": {
+        "branch": "main"
+      },
+      "action": {
+        "prompt": "📦 New push to main: {{ head_sha }} - {{ commit_message }}"
       }
     }
   ]
@@ -91,13 +110,22 @@ Place `.pi/ghwebhook.json` (or `.agents/ghwebhook.json`) in the root of any repo
 | `secret`        | `string`  | `undefined` | Optional webhook HMAC SHA-256 verification secret.                                    |
 | `subscriptions` | `Array`   | `[]`        | List of event subscription rules.                                                     |
 
+### Subscription Rule Fields
+
+- `event`: Upstream GitHub Webhook event identifier (e.g. `workflow_run.completed`, `pull_request.opened`, `push`, `issues.labeled`).
+- `topic`: Optional alias for `event`.
+- `filters`: Declarative filter conditions.
+- `action`: Dispatch instruction containing `prompt` and optional `deliverAs` (`"steer"` or `"followUp"`).
+
 ### Filters
 
 - `branch`: Target branch name or special symbol `"@current"` (dynamically resolved to current working branch).
+- `conclusion`: Workflow conclusion (`"success"`, `"failure"`, `"cancelled"`, `"skipped"`, etc.).
 - `workflow`: Workflow name (e.g. `"CI"`).
+- `state`: Review state (`"approved"`, `"changes_requested"`, `"commented"`) or PR state.
 - `senders`: Array of allowed sender logins (e.g. `["coderabbitai[bot]"]`).
-- `conclusion`: Workflow conclusion (`"success"`, `"failure"`, `"cancelled"`).
-- `state`: Review state (`"approved"`, `"changes_requested"`, `"commented"`).
+- `isBot`: Boolean flag to match Bot (`true`) or Human (`false`) senders.
+- `match`: Arbitrary key-value map for matching nested payload properties using dot-notation (e.g. `{"review.state": "changes_requested"}`).
 
 ### Template Variables
 
@@ -105,29 +133,15 @@ Templates support `{{ variable }}` interpolation:
 
 - `{{ branch }}`: Branch name
 - `{{ head_sha }}`: Commit SHA
+- `{{ commit_message }}`: Head commit message
 - `{{ repo }}` / `{{ repo_url }}`: Repository name and HTML URL
 - `{{ run_id }}` / `{{ run_url }}` / `{{ workflow }}` / `{{ conclusion }}`: Workflow run details
 - `{{ pr_number }}` / `{{ pr_title }}` / `{{ pr_url }}`: PR details
+- `{{ issue_number }}` / `{{ issue_title }}` / `{{ issue_url }}` / `{{ issue_body }}`: Issue details
 - `{{ sender }}` / `{{ sender_type }}`: Triggering sender
 - `{{ review_state }}` / `{{ review_body }}` / `{{ review_url }}`: Review details
 - `{{ comment_body }}` / `{{ comment_url }}`: Comment details
-
----
-
-## 📡 Event Topics
-
-| Topic                                          | Trigger Event                             |
-| ---------------------------------------------- | ----------------------------------------- |
-| `github.workflow_run.failure`                  | Workflow run finished with failure        |
-| `github.workflow_run.success`                  | Workflow run finished with success        |
-| `github.workflow_run.cancelled`                | Workflow run was cancelled                |
-| `github.check_suite.failure`                   | Check suite finished with failure         |
-| `github.check_suite.success`                   | Check suite finished with success         |
-| `github.pull_request_review.bot`               | Review submitted by bot (e.g. CodeRabbit) |
-| `github.pull_request_review.human`             | Review submitted by human                 |
-| `github.pull_request_review.changes_requested` | Review submitted requesting changes       |
-| `github.pull_request_review_comment.created`   | New inline PR review comment              |
-| `github.issue_comment.created`                 | New comment on issue/PR                   |
+- `{{ action }}`: Payload action string
 
 ---
 

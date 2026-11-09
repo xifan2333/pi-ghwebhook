@@ -25,10 +25,11 @@ export class GhForwarder {
   start(): void {
     if (this.child) return;
 
+    // Default to '*' to listen to ALL events from the repository
     const eventsArg =
       this.options.events && this.options.events.length > 0
         ? this.options.events.join(",")
-        : "workflow_run,pull_request_review,pull_request_review_comment,check_suite,issue_comment";
+        : "*";
 
     const args = [
       "webhook",

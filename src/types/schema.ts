@@ -5,16 +5,38 @@ export const FilterSchema = Type.Object(
     branch: Type.Optional(
       Type.String({ description: "Target branch name or '@current'" }),
     ),
+    conclusion: Type.Optional(
+      Type.String({
+        description: "Conclusion filter (e.g. 'failure', 'success')",
+      }),
+    ),
     workflow: Type.Optional(
-      Type.String({ description: "Workflow name filter" }),
+      Type.String({ description: "Workflow name filter (e.g. 'CI')" }),
+    ),
+    state: Type.Optional(
+      Type.String({
+        description:
+          "Review or PR state filter (e.g. 'changes_requested', 'approved')",
+      }),
     ),
     senders: Type.Optional(
       Type.Array(Type.String(), { description: "Allowed sender logins" }),
     ),
-    conclusion: Type.Optional(
-      Type.String({ description: "Workflow conclusion filter" }),
+    isBot: Type.Optional(
+      Type.Boolean({
+        description: "Filter for bot (true) or human (false) senders",
+      }),
     ),
-    state: Type.Optional(Type.String({ description: "Review state filter" })),
+    match: Type.Optional(
+      Type.Record(
+        Type.String(),
+        Type.Union([Type.String(), Type.Number(), Type.Boolean()]),
+        {
+          description:
+            "Arbitrary field matching on payload (dot-separated path)",
+        },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -40,7 +62,18 @@ export type ActionConfig = Static<typeof ActionSchema>;
 
 export const SubscriptionRuleSchema = Type.Object(
   {
-    topic: Type.String({ description: "Standard EventTopic to listen for" }),
+    event: Type.Optional(
+      Type.String({
+        description:
+          "Upstream GitHub Webhook event identifier (e.g. 'workflow_run.completed', 'push', 'issues.opened')",
+      }),
+    ),
+    topic: Type.Optional(
+      Type.String({
+        description:
+          "Alias for 'event' (e.g. 'workflow_run.completed' or 'github.workflow_run.completed')",
+      }),
+    ),
     filters: Type.Optional(FilterSchema),
     action: ActionSchema,
   },

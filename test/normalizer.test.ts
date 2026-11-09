@@ -1,102 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeEvent } from "../dist/bus/normalizer.js";
-import { GitHubEvent, EventTopic } from "../dist/types/enums.js";
+import {
+  normalizeEventKey,
+  resolveIncomingEventKeys,
+} from "../dist/bus/normalizer.js";
 
-test("normalizer - workflow_run completed with failure", () => {
-  const payload = {
+test("normalizer - normalizeEventKey removes github. prefix", () => {
+  assert.equal(
+    normalizeEventKey("github.workflow_run.completed"),
+    "workflow_run.completed",
+  );
+  assert.equal(
+    normalizeEventKey("workflow_run.completed"),
+    "workflow_run.completed",
+  );
+  assert.equal(normalizeEventKey("  github.push  "), "push");
+});
+
+test("normalizer - resolveIncomingEventKeys generates action and base keys", () => {
+  const keys = resolveIncomingEventKeys("workflow_run", {
     action: "completed",
-    workflow_run: {
-      conclusion: "failure",
-      name: "CI",
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.WorkflowRun, payload);
-  assert.equal(topic, EventTopic.WorkflowFailure);
+  });
+  assert.deepEqual(keys, ["workflow_run.completed", "workflow_run"]);
 });
 
-test("normalizer - workflow_run completed with success", () => {
-  const payload = {
-    action: "completed",
-    workflow_run: {
-      conclusion: "success",
-      name: "CI",
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.WorkflowRun, payload);
-  assert.equal(topic, EventTopic.WorkflowSuccess);
+test("normalizer - resolveIncomingEventKeys handles events without action", () => {
+  const keys = resolveIncomingEventKeys("push", {});
+  assert.deepEqual(keys, ["push"]);
 });
 
-test("normalizer - workflow_run completed with skipped", () => {
-  const payload = {
-    action: "completed",
-    workflow_run: {
-      conclusion: "skipped",
-      name: "CI",
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.WorkflowRun, payload);
-  assert.equal(topic, EventTopic.WorkflowSkipped);
+test("normalizer - resolveIncomingEventKeys handles pull_request opened", () => {
+  const keys = resolveIncomingEventKeys("pull_request", { action: "opened" });
+  assert.deepEqual(keys, ["pull_request.opened", "pull_request"]);
 });
 
-test("normalizer - workflow_run in_progress returns null", () => {
-  const payload = {
-    action: "in_progress",
-    workflow_run: {
-      conclusion: null,
-      name: "CI",
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.WorkflowRun, payload);
-  assert.equal(topic, null);
-});
-
-test("normalizer - pull_request_review bot submitted", () => {
-  const payload = {
-    action: "submitted",
-    review: {
-      state: "commented",
-      user: {
-        login: "coderabbitai[bot]",
-        type: "Bot",
-      },
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.PullRequestReview, payload);
-  assert.equal(topic, EventTopic.ReviewBotSubmitted);
-});
-
-test("normalizer - pull_request_review human submitted", () => {
-  const payload = {
-    action: "submitted",
-    review: {
-      state: "commented",
-      user: {
-        login: "xifan",
-        type: "User",
-      },
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.PullRequestReview, payload);
-  assert.equal(topic, EventTopic.ReviewHumanSubmitted);
-});
-
-test("normalizer - pull_request_review changes_requested", () => {
-  const payload = {
-    action: "submitted",
-    review: {
-      state: "changes_requested",
-      user: {
-        login: "reviewer",
-        type: "User",
-      },
-    },
-  };
-  const topic = normalizeEvent(GitHubEvent.PullRequestReview, payload);
-  assert.equal(topic, EventTopic.ReviewChangesRequested);
-});
-
-test("normalizer - unhandled event returns null", () => {
-  const topic = normalizeEvent("unknown_event", {});
-  assert.equal(topic, null);
+test("normalizer - resolveIncomingEventKeys handles issues labeled", () => {
+  const keys = resolveIncomingEventKeys("issues", { action: "labeled" });
+  assert.deepEqual(keys, ["issues.labeled", "issues"]);
 });

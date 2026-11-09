@@ -1,12 +1,13 @@
 import type { SubscriptionRule } from "../types/schema.js";
 import type { WebhookPayload } from "../types/payload.js";
 import { evaluateGuards } from "./guards.js";
+import { normalizeEventKey, resolveIncomingEventKeys } from "./normalizer.js";
 import { extractVariables, renderTemplate } from "../template/renderer.js";
 
 export interface ActionPlan {
   prompt: string;
   deliverAs: "steer" | "followUp";
-  topic: string;
+  event: string;
 }
 
 export class WebhookEventBus {
@@ -14,23 +15,41 @@ export class WebhookEventBus {
 
   constructor(rules: SubscriptionRule[]) {
     for (const rule of rules) {
-      const existing = this.routes.get(rule.topic) ?? [];
+      const rawKey = rule.event ?? rule.topic;
+      if (!rawKey) continue;
+      const normalizedKey = normalizeEventKey(rawKey);
+
+      const existing = this.routes.get(normalizedKey) ?? [];
       existing.push(rule);
-      this.routes.set(rule.topic, existing);
+      this.routes.set(normalizedKey, existing);
     }
   }
 
-  getTopics(): string[] {
+  getEvents(): string[] {
     return Array.from(this.routes.keys());
   }
 
   dispatch(
-    topic: string,
+    event: string,
     payload: WebhookPayload,
     currentBranch: string,
   ): ActionPlan[] {
-    const matchedRules = this.routes.get(topic);
-    if (!matchedRules || matchedRules.length === 0) {
+    const candidateKeys = resolveIncomingEventKeys(event, payload);
+    const seenRules = new Set<SubscriptionRule>();
+    const matchedRules: SubscriptionRule[] = [];
+
+    for (const key of candidateKeys) {
+      const rules = this.routes.get(key);
+      if (!rules) continue;
+      for (const rule of rules) {
+        if (!seenRules.has(rule)) {
+          seenRules.add(rule);
+          matchedRules.push(rule);
+        }
+      }
+    }
+
+    if (matchedRules.length === 0) {
       return [];
     }
 
@@ -43,7 +62,7 @@ export class WebhookEventBus {
         plans.push({
           prompt: renderTemplate(rule.action.prompt, vars),
           deliverAs: rule.action.deliverAs ?? "followUp",
-          topic: rule.topic,
+          event: rule.event ?? rule.topic ?? event,
         });
       }
     }

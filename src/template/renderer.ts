@@ -6,21 +6,22 @@ function extractRepoVars(
   payload: WebhookPayload,
   vars: Record<string, string>,
 ): void {
-  const repo = payload.repository;
-  if (!repo?.full_name) return;
-  vars.repo = String(repo.full_name);
-  vars.repo_url = String(repo.html_url ?? "");
+  if (payload.repository?.full_name) {
+    vars.repo = String(payload.repository.full_name);
+    vars.repo_url = String(payload.repository.html_url ?? "");
+  }
 }
 
 function extractBranchVars(
   payload: WebhookPayload,
-  fallbackBranch: string,
   vars: Record<string, string>,
+  fallbackBranch: string,
 ): void {
   const branch =
     payload.workflow_run?.head_branch ??
     payload.pull_request?.head?.ref ??
     payload.check_suite?.head_branch ??
+    payload.workflow_job?.head_branch ??
     fallbackBranch;
   if (branch) vars.branch = String(branch);
 
@@ -28,8 +29,13 @@ function extractBranchVars(
     payload.workflow_run?.head_sha ??
     payload.pull_request?.head?.sha ??
     payload.check_suite?.head_sha ??
-    payload.after;
+    payload.after ??
+    payload.head_commit?.id;
   if (headSha) vars.head_sha = String(headSha);
+
+  if (payload.head_commit?.message) {
+    vars.commit_message = String(payload.head_commit.message);
+  }
 }
 
 function extractWorkflowVars(
@@ -58,27 +64,37 @@ function extractPullRequestVars(
   if (pr.number != null) vars.pr_number = String(pr.number);
   if (pr.title) vars.pr_title = String(pr.title);
   if (pr.html_url) vars.pr_url = String(pr.html_url);
+  if (pr.state) vars.pr_state = String(pr.state);
 }
 
-function extractReviewVars(
+function extractIssueVars(
   payload: WebhookPayload,
   vars: Record<string, string>,
 ): void {
-  const rev = payload.review;
-  if (!rev) return;
-  if (rev.state) vars.review_state = String(rev.state);
-  if (rev.body != null) vars.review_body = String(rev.body);
-  if (rev.html_url) vars.review_url = String(rev.html_url);
+  const iss = payload.issue;
+  if (!iss) return;
+  if (iss.number != null) vars.issue_number = String(iss.number);
+  if (iss.title) vars.issue_title = String(iss.title);
+  if (iss.html_url) vars.issue_url = String(iss.html_url);
+  if (iss.body != null) vars.issue_body = String(iss.body);
 }
 
-function extractCommentVars(
+function extractReviewAndCommentVars(
   payload: WebhookPayload,
   vars: Record<string, string>,
 ): void {
-  const c = payload.comment;
-  if (!c) return;
-  if (c.body != null) vars.comment_body = String(c.body);
-  if (c.html_url) vars.comment_url = String(c.html_url);
+  if (payload.review) {
+    const rev = payload.review;
+    if (rev.state) vars.review_state = String(rev.state);
+    if (rev.body != null) vars.review_body = String(rev.body);
+    if (rev.html_url) vars.review_url = String(rev.html_url);
+  }
+
+  if (payload.comment) {
+    const c = payload.comment;
+    if (c.body != null) vars.comment_body = String(c.body);
+    if (c.html_url) vars.comment_url = String(c.html_url);
+  }
 }
 
 function extractSenderVars(
@@ -103,13 +119,19 @@ export function extractVariables(
   fallbackBranch = "",
 ): Record<string, string> {
   const vars: Record<string, string> = {};
+
+  if (payload.action) {
+    vars.action = String(payload.action);
+  }
+
   extractRepoVars(payload, vars);
-  extractBranchVars(payload, fallbackBranch, vars);
+  extractBranchVars(payload, vars, fallbackBranch);
   extractWorkflowVars(payload, vars);
   extractPullRequestVars(payload, vars);
-  extractReviewVars(payload, vars);
-  extractCommentVars(payload, vars);
+  extractIssueVars(payload, vars);
+  extractReviewAndCommentVars(payload, vars);
   extractSenderVars(payload, vars);
+
   return vars;
 }
 
