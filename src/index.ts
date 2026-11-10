@@ -1,16 +1,12 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { WebhookController } from "./controller.js";
+import { renderGhWebhookMessage } from "./ui/message-renderer.js";
 
 export default function ghWebhookExtension(pi: ExtensionAPI): void {
   const controller = new WebhookController(pi);
 
-  // Register message renderer for incoming Webhook trigger events
-  pi.registerMessageRenderer("ghwebhook", (message, options, theme) => {
-    const { outputPad } = options;
-    const header = theme.fg("accent", "⚡ [GitHub Webhook]");
-    return new Text(`${header}\n${message.content}`, outputPad, 0);
-  });
+  // Register custom Box message renderer for incoming Webhook trigger events
+  pi.registerMessageRenderer("ghwebhook", renderGhWebhookMessage);
 
   process.once("exit", () => {
     controller.stop().catch(() => {});

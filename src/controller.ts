@@ -215,13 +215,25 @@ export class WebhookController {
       onEvent: async (event, payload) => {
         await this.refreshBranch();
         const plans = bus.dispatch(event, payload, this.currentBranch);
+        const action =
+          typeof payload === "object" && payload !== null && "action" in payload
+            ? String((payload as Record<string, unknown>).action)
+            : undefined;
+
         for (const plan of plans) {
           this.pi.sendMessage(
             {
               customType: "ghwebhook",
               content: plan.prompt,
               display: true,
-              details: { event, jobId: plan.jobId },
+              details: {
+                event,
+                jobId: plan.jobId,
+                repo: this.repo,
+                branch: this.currentBranch,
+                action,
+                timestamp: Date.now(),
+              },
             },
             {
               triggerTurn: true,
