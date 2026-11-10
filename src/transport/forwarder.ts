@@ -14,7 +14,7 @@ export interface ForwarderOptions {
   secret?: string;
   onLog?: (line: string) => void;
   onError?: (err: Error) => void;
-  onStatusChange?: (status: ForwarderState, detail?: string) => void;
+  onStatusChange?: (status: ForwarderState) => void;
   spawnFn?: typeof spawn;
   cleanupStaleHooks?: (repo: string) => Promise<boolean>;
   minRetryDelayMs?: number;
@@ -215,10 +215,7 @@ export class GhForwarder {
     this.retryCount++;
     const delay = this.calculateBackoffDelay();
 
-    this.setStatus(
-      ForwarderState.Reconnecting,
-      `长连接意外断开，正在进行第 ${this.retryCount} 次重连 (${Math.round(delay / 1000)}s 后重试)...`,
-    );
+    this.setStatus(ForwarderState.Reconnecting);
 
     await this.healStaleHookIfConflicted();
 
@@ -259,9 +256,9 @@ export class GhForwarder {
     this.setStatus(ForwarderState.Stopped);
   }
 
-  private setStatus(status: ForwarderState, detail?: string): void {
-    if (this.status === status && !detail) return;
+  private setStatus(status: ForwarderState): void {
+    if (this.status === status) return;
     this.status = status;
-    this.options.onStatusChange?.(status, detail);
+    this.options.onStatusChange?.(status);
   }
 }

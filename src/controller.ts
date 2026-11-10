@@ -247,11 +247,8 @@ export class WebhookController {
       url: this.loopback!.getUrl(),
       secret: config.secret,
       onError: (err) => console.error("[ghwk] gh forwarder error:", err),
-      onStatusChange: (status, detail) => {
+      onStatusChange: () => {
         this.updateStatusBar(this.ctx);
-        if (status === ForwarderState.Reconnecting && detail) {
-          console.warn(`[ghwk] ${detail}`);
-        }
       },
     });
     this.forwarder.start();

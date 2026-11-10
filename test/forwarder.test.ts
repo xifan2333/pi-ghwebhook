@@ -44,7 +44,7 @@ test("forwarder - starts and transitions to running, stops to stopped", () => {
 
 test("forwarder - unexpected exit triggers reconnect and exponential backoff", async () => {
   let mockChild: MockChildProcess | null = null;
-  const statusHistory: Array<{ status: string; detail?: string }> = [];
+  const statusHistory: string[] = [];
 
   const forwarder = new GhForwarder({
     repo: "owner/repo",
@@ -55,7 +55,7 @@ test("forwarder - unexpected exit triggers reconnect and exponential backoff", a
       mockChild = new MockChildProcess();
       return mockChild as unknown as ChildProcess;
     },
-    onStatusChange: (status, detail) => statusHistory.push({ status, detail }),
+    onStatusChange: (status) => statusHistory.push(status),
   });
 
   forwarder.start();

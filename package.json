@@ -1,6 +1,6 @@
 {
   "name": "pi-ghwebhook",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Universal GitHub Webhook event bus and wake-up engine for Pi coding agent",
   "keywords": [
     "pi-package",

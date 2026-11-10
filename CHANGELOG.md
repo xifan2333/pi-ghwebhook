@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-11-10
+
+### Fixed
+
+- **Eliminate Stderr Input Box Pollution**: Purged `console.warn` from `onStatusChange` and removed hardcoded Chinese detail formatting from `GhForwarder`. Forwarder state transitions (`Reconnecting`, etc.) are now strictly conveyed through Pi's native `ctx.ui.setStatus` status bar, preventing raw `stderr` stream output from corrupting the TUI input editor buffer.
+
 ## [0.4.1] - 2026-11-10
 
 ### Fixed
